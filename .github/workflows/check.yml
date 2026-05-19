@@ -5,7 +5,12 @@ on:
     branches:
       - main
       - beta
+    tags:
+      - '*'
   pull_request:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -26,8 +31,47 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Package Chrome extension
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          safe_ref_name="${GITHUB_REF_NAME//\//-}"
+          zip_name="booth-batch-chrome-extension-${safe_ref_name}.zip"
+
+          cd dist/chrome-extension
+          zip -r "../${zip_name}" .
+          cd ../..
+
+          echo "CHROME_EXTENSION_ZIP=dist/${zip_name}" >> "$GITHUB_ENV"
+          echo "CHROME_EXTENSION_ZIP_NAME=${zip_name}" >> "$GITHUB_ENV"
+
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: booth-batch-dist
           path: dist
+
+      - name: Upload Chrome extension zip artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CHROME_EXTENSION_ZIP_NAME }}
+          path: ${{ env.CHROME_EXTENSION_ZIP }}
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$CHROME_EXTENSION_ZIP" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$CHROME_EXTENSION_ZIP" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
