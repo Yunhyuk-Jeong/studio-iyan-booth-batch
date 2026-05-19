@@ -1,0 +1,24 @@
+{
+	"manifest_version": 3,
+	"name": "__MSG_extensionName__",
+	"short_name": "__MSG_extensionShortName__",
+	"version": "__CHROME_VERSION__",
+	"version_name": "__PACKAGE_VERSION__",
+	"description": "__MSG_extensionDescription__",
+	"default_locale": "en",
+	"homepage_url": "https://studio-iyan-booth-batch.pages.dev/",
+	"action": {
+		"default_title": "__MSG_actionTitle__"
+	},
+	"content_scripts": [
+		{
+			"matches": [
+				"https://manage.booth.pm/items/*/edit"
+			],
+			"js": [
+				"booth-batch.content.js"
+			],
+			"run_at": "document_idle"
+		}
+	]
+}

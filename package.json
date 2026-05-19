@@ -1,11 +1,13 @@
 {
 	"name": "booth-batch",
-	"version": "2.1.4-beta.1",
+	"version": "2.2.0",
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"build": "node scripts/build-userscript.mjs",
-		"build:userscript": "node scripts/build-userscript.mjs"
+		"build": "node scripts/build.mjs",
+		"build:all": "node scripts/build.mjs",
+		"build:userscript": "node scripts/build.mjs userscript",
+		"build:extension": "node scripts/build.mjs extension"
 	},
 	"devDependencies": {}
 }

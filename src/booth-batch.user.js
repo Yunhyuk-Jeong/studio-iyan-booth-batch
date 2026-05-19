@@ -1,13 +1,13 @@
 // ==UserScript==
-// @name         Booth Price & Tag Batch Beta
+// @name         Booth Price & Tag Batch
 // @namespace    https://studio.iyan-kim.dev/
-// @version      2.1.4-beta.1
+// @version      2.2.0
 // @description  Booth 가격 일괄 변경 + 태그 교체 + 옵션별 Digital Files 교체 적용
 // @match        https://manage.booth.pm/items/*/edit
 // @run-at       document-idle
 // @grant        none
-// @downloadURL  https://studio-iyan-booth-batch.pages.dev/beta/booth-batch.user.js
-// @updateURL    https://studio-iyan-booth-batch.pages.dev/beta/booth-batch.user.js
+// @downloadURL  https://studio-iyan-booth-batch.pages.dev/booth-batch.user.js
+// @updateURL    https://studio-iyan-booth-batch.pages.dev/booth-batch.user.js
 // ==/UserScript==
 
 (function () {
@@ -316,6 +316,41 @@
 		pos: null,
 	};
 
+	/***** I18N *****/
+	const BPTE_MESSAGES = /* __BPTE_MESSAGES__ */ {};
+	const BPTE_BUILD_LOCALE = '__BPTE_BUILD_LOCALE__';
+
+	function normalizeLocale(locale) {
+		const s = String(locale || '').toLowerCase();
+		if (!s || s === 'auto' || s.startsWith('__')) return '';
+		if (s.startsWith('ko')) return 'ko';
+		if (s.startsWith('ja')) return 'ja';
+		if (s.startsWith('en')) return 'en';
+		return '';
+	}
+
+	function pickLocale() {
+		const candidates = [BPTE_BUILD_LOCALE, ...(navigator.languages || []), navigator.language, document.documentElement.lang];
+
+		for (const candidate of candidates) {
+			const locale = normalizeLocale(candidate);
+			if (locale && BPTE_MESSAGES[locale]) return locale;
+		}
+
+		return BPTE_MESSAGES.ko ? 'ko' : Object.keys(BPTE_MESSAGES)[0] || 'ko';
+	}
+
+	const BPTE_LOCALE = pickLocale();
+
+	function t(key, values = {}) {
+		const template = BPTE_MESSAGES[BPTE_LOCALE]?.[key] ?? BPTE_MESSAGES.en?.[key] ?? BPTE_MESSAGES.ko?.[key] ?? key;
+		return String(template).replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ''));
+	}
+
+	function renderFoundCounts(priceFound = 0, priceTotal = 0, tagFound = 0) {
+		return t('foundCounts', { priceFound, priceTotal, tagFound });
+	}
+
 	/***** UI *****/
 	const style = el('style', {
 		textContent: `
@@ -351,45 +386,45 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 
 	const panel = el('div', { id: 'bpte-panel' });
 	const header = el('div', { id: 'bpte-header' });
-	const title = el('div', { id: 'bpte-title', textContent: 'Booth Price & Tag Batch' });
+	const title = el('div', { id: 'bpte-title', textContent: t('panelTitle') });
 	header.append(title);
 	const body = el('div', { id: 'bpte-body' });
 
 	document.documentElement.append(style, panel);
 	panel.append(header, body);
 
-	const lblFound = el('div', { className: 'muted', textContent: '가격 인풋: 0 • 태그 인풋: 0' });
+	const lblFound = el('div', { className: 'muted', textContent: renderFoundCounts() });
 
 	const chkDirect = el('input', { type: 'checkbox', checked: true });
-	const labDirect = el('label', { textContent: ' 직접 타이핑(React 대응)' });
+	const labDirect = el('label', { textContent: ` ${t('directTyping')}` });
 	labDirect.prepend(chkDirect);
 
-	const btnRescan = el('button', { textContent: 'Scan(다시 탐색)' });
-	const btnStop = el('button', { textContent: 'Stop(중단)', disabled: true });
+	const btnRescan = el('button', { textContent: t('scan') });
+	const btnStop = el('button', { textContent: t('stop'), disabled: true });
 
 	// 가격
-	const inpSet = el('input', { type: 'number', placeholder: '일괄 금액 지정(원)', value: '' });
+	const inpSet = el('input', { type: 'number', placeholder: t('setPricePlaceholder'), value: '' });
 	const selRound = el('select', {}, [
-		el('option', { value: '0', textContent: '반올림: 없음' }),
-		el('option', { value: '1', textContent: '일원 단위 반올림' }),
-		el('option', { value: '10', textContent: '십원 단위 반올림' }),
-		el('option', { value: '100', textContent: '백원 단위 반올림' }),
+		el('option', { value: '0', textContent: t('roundNone') }),
+		el('option', { value: '1', textContent: t('roundOnes') }),
+		el('option', { value: '10', textContent: t('roundTens') }),
+		el('option', { value: '100', textContent: t('roundHundreds') }),
 	]);
-	const btnApplySet = el('button', { textContent: '금액 → 일괄 설정(실적용)' });
-	const btnApplyDelta = el('button', { textContent: '금액 → ±원 증감(실적용)' });
-	const btnApplyPct = el('button', { textContent: '금액 → ±% 증감(실적용)' });
-	const inpDelta = el('input', { type: 'number', placeholder: '±원 증감 (예: 500, -300)', value: '' });
-	const inpPct = el('input', { type: 'number', placeholder: '±% 증감 (예: 10, -15)', value: '' });
-	const btnClearMarks = el('button', { textContent: '변경 표시 지우기' });
+	const btnApplySet = el('button', { textContent: t('applySetPrice') });
+	const btnApplyDelta = el('button', { textContent: t('applyDeltaPrice') });
+	const btnApplyPct = el('button', { textContent: t('applyPercentPrice') });
+	const inpDelta = el('input', { type: 'number', placeholder: t('deltaPlaceholder'), value: '' });
+	const inpPct = el('input', { type: 'number', placeholder: t('percentPlaceholder'), value: '' });
+	const btnClearMarks = el('button', { textContent: t('clearMarks') });
 
 	// 태그
-	const inpTags = el('input', { type: 'text', placeholder: '태그들 입력 (쉼표로만 구분)' });
-	const selTagMode = el('select', {}, [el('option', { value: 'add', textContent: '태그 모드: 추가' }), el('option', { value: 'replace', textContent: '태그 모드: 교체(기존 삭제 후 입력)' })]);
-	const btnTagsApply = el('button', { textContent: '태그 적용(실적용)' });
+	const inpTags = el('input', { type: 'text', placeholder: t('tagsPlaceholder') });
+	const selTagMode = el('select', {}, [el('option', { value: 'add', textContent: t('tagModeAdd') }), el('option', { value: 'replace', textContent: t('tagModeReplace') })]);
+	const btnTagsApply = el('button', { textContent: t('applyTags') });
 
 	// Digital Files
-	const inpCommonFiles = el('input', { type: 'text', placeholder: 'Digital Files 공통 키워드(쉼표) 예: MaterialPack, PC' });
-	const btnApplyFiles = el('button', { textContent: '옵션 Digital Files 교체 적용(실적용)' });
+	const inpCommonFiles = el('input', { type: 'text', placeholder: t('commonFilesPlaceholder') });
+	const btnApplyFiles = el('button', { textContent: t('applyFiles') });
 
 	const progress = el('div', { id: 'bpte-progress', className: 'muted', textContent: '' });
 
@@ -398,17 +433,17 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 		el('div', { className: 'row' }, [labDirect, el('div', { className: 'muted', textContent: ' ' })]),
 		el('div', { className: 'row' }, [btnRescan, btnStop]),
 		el('hr'),
-		el('div', { className: 'muted', textContent: '가격' }),
+		el('div', { className: 'muted', textContent: t('priceSection') }),
 		el('div', { className: 'row' }, [inpSet, selRound]),
 		el('div', { className: 'row' }, [btnApplySet, btnApplyDelta]),
 		el('div', { className: 'row' }, [inpDelta, inpPct]),
 		el('div', { className: 'row' }, [btnApplyPct, btnClearMarks]),
 		el('hr'),
-		el('div', { className: 'muted', textContent: '태그(쉼표 전용)' }),
+		el('div', { className: 'muted', textContent: t('tagSection') }),
 		inpTags,
 		el('div', { className: 'row' }, [selTagMode, btnTagsApply]),
 		el('hr'),
-		el('div', { className: 'muted', textContent: '옵션별 Digital Files (교체)' }),
+		el('div', { className: 'muted', textContent: t('filesSection') }),
 		inpCommonFiles,
 		btnApplyFiles,
 		progress,
@@ -508,7 +543,7 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 		// ✅ 태그 인풋: 신/구 셀렉터로 전부 잡음
 		state.tagTargets = $(TAG_INPUT_SELECTOR).filter(isVisible);
 
-		lblFound.textContent = `가격 인풋: ${state.priceTargets.length}/${allPrice.length} • 태그 인풋: ${state.tagTargets.length}`;
+		lblFound.textContent = renderFoundCounts(state.priceTargets.length, allPrice.length, state.tagTargets.length);
 
 		for (const n of $(PRICE_INPUT_SELECTOR)) n.classList.remove('bpte-changed');
 		for (const n of $(TAG_INPUT_SELECTOR)) n.classList.remove('bpte-changed');
@@ -634,7 +669,7 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 	async function applyTagsOnce() {
 		const tags = normalizeTagsCommaOnly(state.tagsText);
 		if (!tags.length) {
-			alert('추가할 태그가 없습니다. 쉼표(,)로만 구분해서 입력해 주세요.');
+			alert(t('alertNoTags'));
 			return;
 		}
 		if (!state.tagTargets.length) scan();
@@ -643,12 +678,12 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 			if (state.stop) break;
 
 			if (state.tagMode === 'replace') {
-				progress.textContent = '기존 태그 삭제 중...';
+				progress.textContent = t('deletingTags');
 				await removeAllExistingTags(input);
 				await sleep(150);
 			}
 
-			progress.textContent = '태그 입력 중...';
+			progress.textContent = t('enteringTags');
 			for (const tag of tags) {
 				if (state.stop) break;
 
@@ -658,7 +693,7 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 			input.classList.add('bpte-changed');
 			await sleep(60);
 		}
-		progress.textContent = state.stop ? '중단됨' : '완료!';
+		progress.textContent = state.stop ? t('stopped') : t('done');
 	}
 
 	/***** Digital Files (옵션별) *****/
@@ -815,17 +850,17 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 		const vTokensLoose = new Set(vTokens.map(normLoose).filter(Boolean));
 
 		const btn = findDigitalFilesButton(card);
-		progress.textContent = `옵션 처리: "${vName || '(빈 옵션명)'}"`;
+		progress.textContent = t('optionProcessing', { name: vName || t('emptyVariationName') });
 
 		if (!btn) {
-			progress.textContent = `옵션 "${vName}": Edit/Add(Edit Files) 버튼을 못 찾음(스킵)`;
+			progress.textContent = t('filesButtonNotFound', { name: vName });
 			await sleep(250);
 			return;
 		}
 
 		const modal = await openFilesModalByButton(btn);
 		if (!modal) {
-			progress.textContent = `옵션 "${vName}": 파일 모달을 못 찾음(스킵)`;
+			progress.textContent = t('filesModalNotFound', { name: vName });
 			await sleep(250);
 			return;
 		}
@@ -835,12 +870,12 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 		try {
 			const rows = listFileRowsInModal(modal);
 			if (!rows.length) {
-				progress.textContent = `옵션 "${vName}": 모달에서 체크박스를 못 찾음(중단)`;
+				progress.textContent = t('modalCheckboxNotFound', { name: vName });
 				return;
 			}
 
 			if (isFull) {
-				progress.textContent = `옵션 "${vName}": Full Pack 옵션 → 전체 파일 체크 중...`;
+				progress.textContent = t('fullPackChecking', { name: vName });
 				for (const r of rows) {
 					if (state.stop) break;
 					await setCheckedByRealClick(r, true);
@@ -851,14 +886,14 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 				return;
 			}
 
-			progress.textContent = `옵션 "${vName}": 기존 체크 해제 중...`;
+			progress.textContent = t('uncheckingExisting', { name: vName });
 			for (const r of rows) {
 				if (state.stop) break;
 				await setCheckedByRealClick(r, false);
 				await sleep(35);
 			}
 
-			progress.textContent = `옵션 "${vName}": 매칭 파일 체크 중...`;
+			progress.textContent = t('checkingMatching', { name: vName });
 			for (const r of rows) {
 				if (state.stop) break;
 
@@ -889,19 +924,19 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 		const cards = getVariationCards();
 
 		if (!cards.length) {
-			alert('옵션(Variation) 카드를 찾지 못했습니다.');
+			alert(t('alertNoVariationCards'));
 			return;
 		}
 
-		progress.textContent = `옵션 ${cards.length}개 처리 시작...`;
+		progress.textContent = t('variationStart', { count: cards.length });
 
 		for (let i = 0; i < cards.length; i++) {
 			if (state.stop) break;
-			progress.textContent = `(${i + 1}/${cards.length}) 옵션 처리 중...`;
+			progress.textContent = t('variationProcessing', { current: i + 1, total: cards.length });
 			await applyDigitalFilesForOneVariation(cards[i], commonKW);
 		}
 
-		progress.textContent = state.stop ? '중단됨' : '옵션 Digital Files 적용 완료!';
+		progress.textContent = state.stop ? t('stopped') : t('filesDone');
 	}
 
 	/***** 잡 러너 *****/
@@ -920,14 +955,14 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 		if (state.running) return;
 		state.stop = false;
 		setRunning(true);
-		progress.textContent = '작업 시작...';
+		progress.textContent = t('jobStart');
 		try {
 			await fn();
 			scan();
 		} catch (e) {
 			console.error('[Booth Batch] job error:', e);
-			alert(`오류: ${e?.message || e}`);
-			progress.textContent = '오류 발생';
+			alert(t('errorAlert', { message: e?.message || e }));
+			progress.textContent = t('errorProgress');
 		} finally {
 			setRunning(false);
 			state.stop = false;
@@ -966,7 +1001,7 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 	btnRescan.addEventListener('click', scan);
 	btnStop.addEventListener('click', () => {
 		state.stop = true;
-		progress.textContent = '중단 요청됨...';
+		progress.textContent = t('stopRequested');
 	});
 
 	btnApplySet.addEventListener('click', () =>
@@ -1013,7 +1048,7 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 			panel.style.left = 'auto';
 			panel.style.right = '12px';
 			panel.style.top = '12px';
-			alert('패널 위치를 초기화했습니다.');
+			alert(t('panelReset'));
 		}
 	});
 
