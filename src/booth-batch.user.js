@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Booth Price & Tag Batch
 // @namespace    https://studio.iyan-kim.dev/
-// @version      2.2.0
+// @version      2.2.1
 // @description  Booth 가격 일괄 변경 + 태그 교체 + 옵션별 Digital Files 교체 적용
 // @match        https://manage.booth.pm/items/*/edit
 // @run-at       document-idle
@@ -313,12 +313,15 @@
 		running: false,
 		stop: false,
 
+		locale: null,
 		pos: null,
 	};
 
 	/***** I18N *****/
 	const BPTE_MESSAGES = /* __BPTE_MESSAGES__ */ {};
 	const BPTE_BUILD_LOCALE = '__BPTE_BUILD_LOCALE__';
+	const BPTE_SUPPORTED_LOCALES = ['ko', 'en', 'ja'];
+	const LS_LOCALE_KEY = 'bpte-locale';
 
 	function normalizeLocale(locale) {
 		const s = String(locale || '').toLowerCase();
@@ -329,8 +332,22 @@
 		return '';
 	}
 
+	function loadStoredLocale() {
+		try {
+			return localStorage.getItem(LS_LOCALE_KEY);
+		} catch {
+			return '';
+		}
+	}
+
+	function saveLocale(locale) {
+		try {
+			localStorage.setItem(LS_LOCALE_KEY, locale);
+		} catch {}
+	}
+
 	function pickLocale() {
-		const candidates = [BPTE_BUILD_LOCALE, ...(navigator.languages || []), navigator.language, document.documentElement.lang];
+		const candidates = [loadStoredLocale(), BPTE_BUILD_LOCALE, ...(navigator.languages || []), navigator.language, document.documentElement.lang];
 
 		for (const candidate of candidates) {
 			const locale = normalizeLocale(candidate);
@@ -340,10 +357,10 @@
 		return BPTE_MESSAGES.ko ? 'ko' : Object.keys(BPTE_MESSAGES)[0] || 'ko';
 	}
 
-	const BPTE_LOCALE = pickLocale();
+	state.locale = pickLocale();
 
 	function t(key, values = {}) {
-		const template = BPTE_MESSAGES[BPTE_LOCALE]?.[key] ?? BPTE_MESSAGES.en?.[key] ?? BPTE_MESSAGES.ko?.[key] ?? key;
+		const template = BPTE_MESSAGES[state.locale]?.[key] ?? BPTE_MESSAGES.en?.[key] ?? BPTE_MESSAGES.ko?.[key] ?? key;
 		return String(template).replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ''));
 	}
 
@@ -394,10 +411,22 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 	panel.append(header, body);
 
 	const lblFound = el('div', { className: 'muted', textContent: renderFoundCounts() });
+	const lblLanguage = el('div', { className: 'muted', textContent: t('languageLabel') });
+	const selLanguage = el(
+		'select',
+		{},
+		BPTE_SUPPORTED_LOCALES.map((locale) =>
+			el('option', {
+				value: locale,
+				textContent: BPTE_MESSAGES[locale]?.languageName || locale,
+			}),
+		),
+	);
+	selLanguage.value = state.locale;
 
 	const chkDirect = el('input', { type: 'checkbox', checked: true });
-	const labDirect = el('label', { textContent: ` ${t('directTyping')}` });
-	labDirect.prepend(chkDirect);
+	const labDirectText = document.createTextNode(` ${t('directTyping')}`);
+	const labDirect = el('label', {}, [chkDirect, labDirectText]);
 
 	const btnRescan = el('button', { textContent: t('scan') });
 	const btnStop = el('button', { textContent: t('stop'), disabled: true });
@@ -410,6 +439,7 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 		el('option', { value: '10', textContent: t('roundTens') }),
 		el('option', { value: '100', textContent: t('roundHundreds') }),
 	]);
+	const roundOptions = Array.from(selRound.options);
 	const btnApplySet = el('button', { textContent: t('applySetPrice') });
 	const btnApplyDelta = el('button', { textContent: t('applyDeltaPrice') });
 	const btnApplyPct = el('button', { textContent: t('applyPercentPrice') });
@@ -420,6 +450,7 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 	// 태그
 	const inpTags = el('input', { type: 'text', placeholder: t('tagsPlaceholder') });
 	const selTagMode = el('select', {}, [el('option', { value: 'add', textContent: t('tagModeAdd') }), el('option', { value: 'replace', textContent: t('tagModeReplace') })]);
+	const tagModeOptions = Array.from(selTagMode.options);
 	const btnTagsApply = el('button', { textContent: t('applyTags') });
 
 	// Digital Files
@@ -427,27 +458,70 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 	const btnApplyFiles = el('button', { textContent: t('applyFiles') });
 
 	const progress = el('div', { id: 'bpte-progress', className: 'muted', textContent: '' });
+	const sectionPrice = el('div', { className: 'muted', textContent: t('priceSection') });
+	const sectionTags = el('div', { className: 'muted', textContent: t('tagSection') });
+	const sectionFiles = el('div', { className: 'muted', textContent: t('filesSection') });
 
 	body.append(
 		lblFound,
+		el('div', { className: 'row' }, [lblLanguage, selLanguage]),
 		el('div', { className: 'row' }, [labDirect, el('div', { className: 'muted', textContent: ' ' })]),
 		el('div', { className: 'row' }, [btnRescan, btnStop]),
 		el('hr'),
-		el('div', { className: 'muted', textContent: t('priceSection') }),
+		sectionPrice,
 		el('div', { className: 'row' }, [inpSet, selRound]),
 		el('div', { className: 'row' }, [btnApplySet, btnApplyDelta]),
 		el('div', { className: 'row' }, [inpDelta, inpPct]),
 		el('div', { className: 'row' }, [btnApplyPct, btnClearMarks]),
 		el('hr'),
-		el('div', { className: 'muted', textContent: t('tagSection') }),
+		sectionTags,
 		inpTags,
 		el('div', { className: 'row' }, [selTagMode, btnTagsApply]),
 		el('hr'),
-		el('div', { className: 'muted', textContent: t('filesSection') }),
+		sectionFiles,
 		inpCommonFiles,
 		btnApplyFiles,
 		progress,
 	);
+
+	function updateLocaleText() {
+		title.textContent = t('panelTitle');
+		lblLanguage.textContent = t('languageLabel');
+		labDirectText.textContent = ` ${t('directTyping')}`;
+		btnRescan.textContent = t('scan');
+		btnStop.textContent = t('stop');
+		inpSet.placeholder = t('setPricePlaceholder');
+		roundOptions[0].textContent = t('roundNone');
+		roundOptions[1].textContent = t('roundOnes');
+		roundOptions[2].textContent = t('roundTens');
+		roundOptions[3].textContent = t('roundHundreds');
+		btnApplySet.textContent = t('applySetPrice');
+		btnApplyDelta.textContent = t('applyDeltaPrice');
+		btnApplyPct.textContent = t('applyPercentPrice');
+		inpDelta.placeholder = t('deltaPlaceholder');
+		inpPct.placeholder = t('percentPlaceholder');
+		btnClearMarks.textContent = t('clearMarks');
+		inpTags.placeholder = t('tagsPlaceholder');
+		tagModeOptions[0].textContent = t('tagModeAdd');
+		tagModeOptions[1].textContent = t('tagModeReplace');
+		btnTagsApply.textContent = t('applyTags');
+		inpCommonFiles.placeholder = t('commonFilesPlaceholder');
+		btnApplyFiles.textContent = t('applyFiles');
+		sectionPrice.textContent = t('priceSection');
+		sectionTags.textContent = t('tagSection');
+		sectionFiles.textContent = t('filesSection');
+	}
+
+	function setLocale(locale) {
+		const nextLocale = normalizeLocale(locale);
+		if (!nextLocale || !BPTE_MESSAGES[nextLocale]) return;
+		state.locale = nextLocale;
+		selLanguage.value = nextLocale;
+		saveLocale(nextLocale);
+		updateLocaleText();
+		progress.textContent = '';
+		scan();
+	}
 
 	/***** 위치 저장/복원 + 드래그 *****/
 	const LS_POS_KEY = 'bpte-pos';
@@ -970,6 +1044,10 @@ hr { border:none; border-top:1px solid #333; margin:8px 0 }
 	}
 
 	/***** 이벤트 *****/
+	selLanguage.addEventListener('change', () => {
+		setLocale(selLanguage.value);
+	});
+
 	chkDirect.addEventListener('change', () => {
 		state.directTyping = chkDirect.checked;
 	});

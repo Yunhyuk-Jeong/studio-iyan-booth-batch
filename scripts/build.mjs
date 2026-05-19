@@ -35,15 +35,16 @@ function stripUserscriptMetadata(code) {
 	return code.replace(/^\/\/ ==UserScript==[\s\S]*?\/\/ ==\/UserScript==\r?\n?/, '');
 }
 
-function createUserscriptMetadata({ packageJson, locale, message, downloadURL, updateURL }) {
+function createUserscriptMetadata({ packageJson, messages, downloadURL, updateURL }) {
+	const defaultMessage = messages[defaultUserscriptLocale];
 	return [
 		'// ==UserScript==',
-		`// @name         ${message.extensionName}`,
-		`// @name:${locale}      ${message.extensionName}`,
+		`// @name         ${defaultMessage.extensionName}`,
+		...locales.map((locale) => `// @name:${locale}      ${messages[locale].extensionName}`),
 		'// @namespace    https://studio.iyan-kim.dev/',
 		`// @version      ${packageJson.version}`,
-		`// @description  ${message.extensionDescription}`,
-		`// @description:${locale} ${message.extensionDescription}`,
+		`// @description  ${defaultMessage.extensionDescription}`,
+		...locales.map((locale) => `// @description:${locale} ${messages[locale].extensionDescription}`),
 		'// @match        https://manage.booth.pm/items/*/edit',
 		'// @run-at       document-idle',
 		'// @grant        none',
@@ -76,48 +77,34 @@ function copyPublicToDist() {
 	fs.cpSync(paths.publicDir, paths.distDir, { recursive: true });
 }
 
-function writeUserscript({ source, packageJson, messages, locale, outputDir, publicPath }) {
-	const message = messages[locale];
+function writeUserscript({ source, packageJson, messages, outputDir, publicPath }) {
 	const url = `https://studio-iyan-booth-batch.pages.dev/${publicPath}`;
 	const output = withUserscriptMetadata(source, {
 		packageJson,
-		locale,
-		message,
+		messages,
 		downloadURL: url,
 		updateURL: url,
 	});
 
 	fs.mkdirSync(outputDir, { recursive: true });
 	fs.writeFileSync(path.join(outputDir, 'booth-batch.user.js'), output, 'utf8');
-	console.log(`Built ${message.languageName} userscript to ${path.relative(root, outputDir)}\\booth-batch.user.js`);
+	console.log(`Built userscript to ${path.relative(root, outputDir)}\\booth-batch.user.js`);
 }
 
 function buildUserscripts({ packageJson, messages, buildDate }) {
+	const source = readSourceScript({ buildDate, messages, locale: 'auto' });
 	const targets = [
 		{
-			locale: defaultUserscriptLocale,
 			outputDir: paths.userscriptDir,
 			publicPath: 'booth-batch.user.js',
 		},
-		...locales.map((locale) => ({
-			locale,
-			outputDir: path.join(paths.userscriptDir, locale),
-			publicPath: `${locale}/booth-batch.user.js`,
-		})),
 		{
-			locale: defaultUserscriptLocale,
 			outputDir: path.join(paths.userscriptDir, 'beta'),
 			publicPath: 'booth-batch.user.js',
 		},
-		...locales.map((locale) => ({
-			locale,
-			outputDir: path.join(paths.userscriptDir, 'beta', locale),
-			publicPath: `${locale}/booth-batch.user.js`,
-		})),
 	];
 
 	for (const target of targets) {
-		const source = readSourceScript({ buildDate, messages, locale: target.locale });
 		writeUserscript({
 			source,
 			packageJson,
